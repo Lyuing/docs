@@ -1,6 +1,6 @@
-# VPN 代理转发部署分享文档：3x-ui + Xray + VLESS-REALITY（首尔节点）
+# VPN 代理转发部署分享文档：3x-ui + Xray + VLESS-REALITY（海外节点）
 
-> 服务器：腾讯云 首尔 `43.164.130.31` · Ubuntu 26.04 LTS · 2 核 2G · 部署日期：2026-10-16
+> 服务器：腾讯云 首尔 `43.164.xx.xx` · Ubuntu 26.04 LTS · 2 核 2G
 > 客户端目标：Clash Verge Rev（Windows/macOS/Android 通用 Mihomo 内核）
 > ⚠️ 敏感信息（面板密码、UUID、私钥）不在本文档明文扩散，统一存于服务器 `~/vpn-3xui/CREDENTIALS.txt` / `SUBSCRIPTION.txt`（权限 600），分享时请脱敏。
 
@@ -51,7 +51,7 @@
 ```bash
 cat /etc/os-release; uname -a; whoami
 nproc; free -h; df -h
-curl -s ipinfo.io/43.164.130.31      # 确认机房：Seoul / Tencent AS132203
+curl -s ipinfo.io/43.164.xx.xx      # 确认机房：Seoul / Tencent AS132203
 ss -tlnp                             # 确认仅 22 端口在监听
 sudo -n true && echo "sudo OK"       # 确认免密 sudo
 ```
@@ -148,7 +148,7 @@ curl -X POST "http://127.0.0.1:54321/<PANEL_PATH>panel/api/inbounds/add" \
 
 # 4) 启用 Clash / JSON 订阅（默认关！见 FAQ-1）
 #    POST /panel/api/setting/all 取全量 -> 改 subClashEnable=true, subJsonEnable=true,
-#    subClashAutoDetect=true, subDomain=43.164.130.31 -> POST /panel/api/setting/update
+#    subClashAutoDetect=true, subDomain=43.164.xx.xx -> POST /panel/api/setting/update
 cd ~/vpn-3xui && sudo docker compose restart   # 更新 Reality dest 后必须重启才重生成 Xray config
 ```
 
@@ -158,14 +158,14 @@ cd ~/vpn-3xui && sudo docker compose restart   # 更新 Reality dest 后必须�
 # A) Xray 原生客户端：SOCKS 10808 -> VLESS -> 服务器 127.0.0.1:443
 sudo docker cp 3x-ui:/app/bin/xray-linux-amd64 /tmp/xray-test/xray
 /tmp/xray-test/xray run -c /tmp/xray-test/client.json &
-curl -x socks5h://127.0.0.1:10808 https://ipinfo.io/ip        # 43.164.130.31
+curl -x socks5h://127.0.0.1:10808 https://ipinfo.io/ip        # 43.164.xx.xx
 curl -o /dev/null -w "%{http_code} %{time_total}s\n" -x socks5h://127.0.0.1:10808 https://www.google.com/generate_204
 # 结果: 204, 0.124s（直连 0.100s，协议开销 ~24ms，本地回环测试）
 
 # B) Mihomo（Clash Verge 内核）加载 Clash 订阅 YAML
 #    注：服务器本机用公网 IP 会 hairpin 超时（FAQ-5），本地把 server 改 127.0.0.1 验证逻辑
 /tmp/xray-test/mihomo -f clash-local.yaml &
-curl -x http://127.0.0.1:7890 https://ipinfo.io/ip             # 43.164.130.31
+curl -x http://127.0.0.1:7890 https://ipinfo.io/ip             # 43.164.xx.xx
 curl -o /dev/null -w "%{http_code} %{time_total}s\n" -x http://127.0.0.1:7890 https://www.google.com/generate_204
 # 结果: 204, 0.141s ✅ Clash 配置可用
 ```
@@ -177,7 +177,7 @@ curl -o /dev/null -w "%{http_code} %{time_total}s\n" -x http://127.0.0.1:7890 ht
 ### 3.1 登录
 
 ```
-地址: http://43.164.130.31:54321/<随机路径>/     # 完整地址见服务器 SUBSCRIPTION.txt
+地址: http://43.164.xx.xx:54321/<随机路径>/     # 完整地址见服务器 SUBSCRIPTION.txt
 账号: vpnadmin / 见 CREDENTIALS.txt
 ```
 > 登录后建议：设置 → 安全 → 开启两步验证（2FA）；面板仅 HTTP，后续有域名后应在设置 → 证书里配 TLS，或把 54321 在云安全组里限制为仅自己 IP。
@@ -204,7 +204,7 @@ curl -o /dev/null -w "%{http_code} %{time_total}s\n" -x http://127.0.0.1:7890 ht
 
 ### 3.4 Clash Verge Rev 导入订阅（远程订阅）
 
-1. 打开 Clash Verge Rev → **订阅** → 新建 → 粘贴 Clash 订阅 URL（见 `SUBSCRIPTION.txt` 的「Clash订阅」一行，形如 `http://43.164.130.31:2096/<随机路径>/<subId>`）。
+1. 打开 Clash Verge Rev → **订阅** → 新建 → 粘贴 Clash 订阅 URL（见 `SUBSCRIPTION.txt` 的「Clash订阅」一行，形如 `http://43.164.xx.xx:2096/<随机路径>/<subId>`）。
 2. 保存后点 **更新**，选中该配置 → 代理页选择 `Seoul-VLESS-Reality-seoul-user1`（或 PROXY 组）。
 3. 设置 → 开启 **系统代理**（或 TUN 模式）；延迟测试应显示首尔节点 ~40-80ms（视本地运营商）。
 4. 后续在面板增删用户/改节点，Clash Verge 里点一次订阅更新即同步，无需重新分发文件。
@@ -220,6 +220,8 @@ curl -o /dev/null -w "%{http_code} %{time_total}s\n" -x http://127.0.0.1:7890 ht
 
 ## 四、常见问题模块（本次真实遇到的错误记录）
 
+### FAQ-0：防火墙端口，需要在服务器上单独检查开放
+
 ### FAQ-1：订阅 `/sub/<id>` 能打开，但 Clash 路径 404
 - **现象**：`GET /dfs1.../<subId>` 返回 `404 page not found`。
 - **原因**：3x-ui v3 默认 `subClashEnable=false`、`subJsonEnable=false`（且订阅路径是每台机器随机生成的 `/sdlbj.../` 这类路径，不是固定 `/sub/`、`/clash/`）。
@@ -233,13 +235,13 @@ curl -o /dev/null -w "%{http_code} %{time_total}s\n" -x http://127.0.0.1:7890 ht
 ### FAQ-3：本地测订阅时节点地址是 `localhost`
 - **现象**：`curl 127.0.0.1:2096/...` 解码后是 `vless://...@localhost:443`。
 - **原因**：入站 `shareAddrStrategy=node` 时按请求 Host 头生成地址。
-- **解决**：正常现象。用公网域名/IP 访问即为公网地址；本地调试加 `-H "Host: 43.164.130.31:2096"`；也可在面板把分享地址策略改自定义并填服务器 IP。
+- **解决**：正常现象。用公网域名/IP 访问即为公网地址；本地调试加 `-H "Host: 43.164.xx.xx:2096"`；也可在面板把分享地址策略改自定义并填服务器 IP。
 
 ### FAQ-4：Xray 警告 `Choosing "www.microsoft.com" as the target will increase the likelihood of your server's IP being blocked by the GFW`
 - **原因**：微软站是被用滥的 Reality 目标，Xray 26 直接发警告。
 - **解决**：换成 `www.samsung.com:443`（已换；满足 TLS1.3、且与首尔机房地理一致），改后必须重启面板，确认 `docker exec 3x-ui grep samsung /app/bin/config.json` 生效。
 
-### FAQ-5：服务器本机用公网 IP 测 Mihomo 超时 `dial tcp 43.164.130.31:443: i/o timeout`
+### FAQ-5：服务器本机用公网 IP 测 Mihomo 超时 `dial tcp 43.164.xx.xx:443: i/o timeout`
 - **原因**：腾讯云不支持 NAT 回环（hairpin），本机绕公网 IP 回自己不通；不代表外部客户端不通。
 - **解决**：本机验证改连 `127.0.0.1:443`（已实测 204/0.14s）；外部可用性以真机 Clash Verge 拉订阅测延迟为准。同时确认云安全组 443 已放行（FAQ-7）。
 
