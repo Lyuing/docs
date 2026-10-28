@@ -270,6 +270,27 @@ curl -o /dev/null -w "%{http_code} %{time_total}s\n" -x http://127.0.0.1:7890 ht
 - **还要在腾讯云控制台做**（不改的话外网仍进不了新端口）：入站添加 `241**/tcp`、`583**/tcp`；`543**/tcp`、`209*/tcp`、`844*/udp` 可删。控制台规则要在网页里改，改完才会显示新端口。
 - **客户端**：旧订阅地址还是 `:209*`，SNI 还是 `www.samsung.com`，对旧地址点「更新」无效。用 `SUBSCRIPTION.txt` 里的新地址重新导入。改 dest 或端口后若仍连不上，按 FAQ-9 重启 Xray 再拉一次订阅。
 
+### FAQ-11：Shadowrocket 连不上，Clash / v2box 同一订阅正常（2026-10-28）
+
+- **现象**：镜像自带 Xray 26.10.10。同一订阅下桌面 Clash、手机 v2box 正常；Shadowrocket 2.2.80 对本机 VLESS-Reality 超时。Shadowrocket 里其他 VLESS + `xtls-rprx-vision` 节点（对方是旧版 Xray）可以连通。
+- **原因**：
+  1. 2026-09 起的 Reality（Xray 26.9.9 / 26.10.x）拒绝不带 `X25519MLKEM768` keyshare 的 ClientHello，只接受抗量子握手。Shadowrocket 2.2.80 只发传统 X25519，认证失败后连接被回落到伪装站，客户端表现为超时。Clash、v2box 的内核已带 ML-KEM，不受影响。
+  2. 同版本默认最低客户端版本为 Xray-core 26.3.27。版本号写在 Reality 认证数据里，Shadowrocket 对不上，同样被拒。
+  3. 面板下发给 Xray 的入站不含 `flow`，订阅链接仍带 `xtls-rprx-vision`。客户端按 Vision 协商、服务端没有，请求到入站后被丢弃。
+- **解决**（目标站保持 `www.hanwha.com` / `www.samsung.com`，未改密钥和端口）：
+  1. 容器内 Xray 换成 **26.7.28**（最后一个仍接受纯 X25519 Reality 握手的版本）。二进制备份：`~/vpn-3xui/xray-26.7.28.bak`。
+  2. 两个入站的 Reality `minClientVer` 设为 `0.0.0`。
+  3. 客户端去掉 `flow`。改完后重启容器，让客户端重新拉订阅。
+- **重建容器会失效**：`docker compose pull && up -d` 会把内核恢复成镜像里的 26.10.10，Shadowrocket 会再次超时。恢复：
+
+```bash
+sudo docker cp ~/vpn-3xui/xray-26.7.28.bak 3x-ui:/app/bin/xray-linux-amd64
+sudo docker restart 3x-ui
+# 日志应出现：Xray 26.7.28 started
+```
+
+等 Shadowrocket 支持带 `X25519MLKEM768` 的 Reality 握手后，可以改回镜像自带的新内核。
+
 ---
 
 ## 五、运维速查
@@ -278,7 +299,8 @@ curl -o /dev/null -w "%{http_code} %{time_total}s\n" -x http://127.0.0.1:7890 ht
 cd ~/vpn-3xui
 sudo docker compose ps                  # 状态
 sudo docker logs -f 3x-ui               # 日志
-sudo docker compose pull && sudo docker compose up -d   # 升级
+sudo docker compose pull && sudo docker compose up -d   # 升级（会把 Xray 恢复成镜像版本，见 FAQ-11）
+sudo docker cp ~/vpn-3xui/xray-26.7.28.bak 3x-ui:/app/bin/xray-linux-amd64 && sudo docker restart 3x-ui
 sudo docker exec 3x-ui /app/x-ui setting -show           # 面板设置
 cat ~/vpn-3xui/SUBSCRIPTION.txt         # 订阅地址（勿外传）
 # 备份：打包 db 目录即可（x-ui.db 是全部配置）
